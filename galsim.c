@@ -5,8 +5,6 @@
 #include "graphics/graphics.h"
 #include <pthread.h>
 
-#define NUM_THREADS 8
-
 typedef struct QuadTree {
         struct QuadTree *child1;
         struct QuadTree *child2;
@@ -271,13 +269,12 @@ void *force(void * input_data){
         free(output2);
         free(output3);
         free(output4);
-        return;
     }
 }
 
 int main(int argc, char* argv[]) {
 
-    if (argc != 7) {
+    if (argc != 8) {
         printf("Wrong number of inputs");
         return -1;
     }
@@ -288,6 +285,7 @@ int main(int argc, char* argv[]) {
     const double delta_t = atof(argv[4]);
     const double theta_max = atof(argv[5]);
     const int graphics = atoi(argv[6]);
+    const int NUM_THREADS = atoi(argv[7]);
 
 
     // Creates array to store particles
@@ -373,15 +371,28 @@ int main(int argc, char* argv[]) {
             
             create_tree(root, N);
             
-            for(int i = 0; i < N; i++)  
+            for(int i = 0; i < N; i+=NUM_THREADS)  
             {
+                for(int j = 0; j < NUM_THREADS; j++){
+
                 args * arg = (args*)malloc(sizeof(args));
-                arg->particle = array[i];
+                arg->particle = array[i+j];
                 arg->node = root;
                 arg->theta = theta_max;
                 arg->G = G;
-                force(arg);
-                free(arg);
+                
+                pthread_create(&threads[j], NULL, force, arg);
+                //free(arg);
+                }
+
+                for(int j = 0; j < NUM_THREADS; j++){
+                    pthread_join(threads[j],NULL);
+                }
+                //for(int k = 0; k<NUM_THREADS; k++)
+                //{
+                //    pthread_join(threads[k], NULL);
+                //}
+                //pthread_exit(NULL);  
             }
             vel_update(array, N, delta_t);
             pos_update(array, N, delta_t);
