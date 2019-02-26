@@ -42,10 +42,12 @@ typedef struct arguments {
     struct QuadTree * node;
     double theta;
     double G;
+    int start;
+    int stop;
 } args;
 
 
-void vel_update(part** particles, int N, double t) {
+void vel_update(part** particles, int N, double t) {    
 
     for(int i = 0; i < N; i++) {
         particles[i]->x_vel = particles[i]->x_vel + ((particles[i]->x_force)/(particles[i]->mass)) * t;
@@ -240,35 +242,23 @@ void *force(void * input_data){
     }
     else {
 
-
-        args  * output1 = (args*)malloc(sizeof(args));
-        output1->G = G;
-        output1->particle = particle;
-        output1->theta = theta;
-        args  * output2 = (args*)malloc(sizeof(args));
-        output2->G = G;
-        output2->particle = particle;
-        output2->theta = theta;
-        args  * output3 = (args*)malloc(sizeof(args));
-        output3->G = G;
-        output3->particle = particle;
-        output3->theta = theta;
-        args  * output4 = (args*)malloc(sizeof(args));
-        output4->G = G;
-        output4->particle = particle;
-        output4->theta = theta;
-        output1->node = node->child1;
-        output2->node = node->child2;
-        output3->node = node->child3;
-        output4->node = node->child4;
-        force(output1);
-        force(output2);
-        force(output3);
-        force(output4);
-        free(output1);
-        free(output2);
-        free(output3);
-        free(output4);
+        args *input1 = input;
+        args *input2 = input;
+        args *input3 = input;
+        args *input4 = input;
+        
+        input1->node = node->child1;
+        force(input1);
+        
+        input2->node = node->child2;
+        force(input2);
+        
+        input3->node = node->child3;
+        force(input3);
+        
+        input4->node = node->child4;
+        force(input4);
+        
     }
 }
 
@@ -359,7 +349,6 @@ int main(int argc, char* argv[]) {
 
     // Loop without graphics
     else {
-
             QT * root = (QT*)malloc(sizeof(QT));
             root->posx = 0.5;
             root->posy = 0.5;
@@ -367,33 +356,59 @@ int main(int argc, char* argv[]) {
             root->particles = array;
             root->nop = N;
             pthread_t threads[NUM_THREADS];
+            pthread_attr_t attr;
+            pthread_attr_init(&attr);
+            pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
+            int thread_calcs = N/NUM_THREADS;
+            int remaining_cals = N%NUM_THREADS;
+
+
         while(t < nsteps){
-            
+            //printf("Time sted %d \n", t);
             create_tree(root, N);
             
-            for(int i = 0; i < N; i+=NUM_THREADS)  
-            {
-                for(int j = 0; j < NUM_THREADS; j++){
+            //for(int i = 0; i < N-NUM_THREADS; i+=NUM_THREADS)  
+            //{ 
 
-                args * arg = (args*)malloc(sizeof(args));
-                arg->particle = array[i+j];
-                arg->node = root;
-                arg->theta = theta_max;
-                arg->G = G;
+
+                args ** input = (args**)malloc(N*sizeof(args*));
+                    for(int i = 0; i < N; i++)
+                    {
+                    input[i] = (args*) malloc(sizeof(args));
+                    }
                 
-                pthread_create(&threads[j], NULL, force, arg);
-                //free(arg);
+
+                for (int i = 0; i < N; i++){
+                    input[i]->particle = array[i];
+                    input[i]->node = root;
+                    input[i]->theta = theta_max;
+                    input[i]->G = G;
+                }
+                int iteration = 0;
+                for (int i = 0; i < thread_calcs; i++){
+                    for(int j=0; j < NUM_THREADS; j++) {
+                        pthread_create(&(threads[j]), NULL, force, input[j*thread_calcs + iteration]);
+                    }
+                    iteration++;
+                }
+                
+                for(int i=0; i<remaining_cals; i++) {
+                    pthread_create(&(threads[i]), NULL, force, input[N-i-1]);
                 }
 
                 for(int j = 0; j < NUM_THREADS; j++){
-                    pthread_join(threads[j],NULL);
+                    pthread_join(threads[j], NULL);
                 }
                 //for(int k = 0; k<NUM_THREADS; k++)
                 //{
                 //    pthread_join(threads[k], NULL);
                 //}
                 //pthread_exit(NULL);  
-            }
+            //}
+            //for(int j = 0; j < NUM_THREADS; j++){
+             //   pthread_join(threads[j],NULL);
+            //}
+
             vel_update(array, N, delta_t);
             pos_update(array, N, delta_t);
             
@@ -402,6 +417,8 @@ int main(int argc, char* argv[]) {
             
             
         } 
+        printf("skia\n");
+        //pthread_attr_destroy(&attr);
         free(root);                               
     }
 
@@ -421,11 +438,11 @@ int main(int argc, char* argv[]) {
     
     fclose(pw);
 
-    for(int i = 0; i < N-1; i++)
+    for(int i = 0; i < N; i++)
     {
         free(array[i]);
     }
     free(array);
-    
+    //pthread_exit(NULL);
 return 0;
 }
