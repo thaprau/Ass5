@@ -38,7 +38,7 @@ typedef struct particle {
 
 typedef struct arguments {
 
-    struct particle * particle;
+    struct particle ** particles;
     struct QuadTree * node;
     double theta;
     double G;
@@ -200,14 +200,8 @@ void free_tree(QT * node){
 }
 
 
-// part * particle, QT * restrict node, double theta, double G
-void *force(void * input_data){
 
-    args * input  = (args*) input_data;
-    QT * node = input->node;
-    part * particle = input->particle;
-    double theta = input->theta;
-    double G = input->G;
+void force(part * particle, QT * restrict node, double theta, double G){   
 
     if(node->nop == 0) {
         return;
@@ -242,24 +236,26 @@ void *force(void * input_data){
     }
     else {
 
-        args *input1 = input;
-        args *input2 = input;
-        args *input3 = input;
-        args *input4 = input;
-        
-        input1->node = node->child1;
-        force(input1);
-        
-        input2->node = node->child2;
-        force(input2);
-        
-        input3->node = node->child3;
-        force(input3);
-        
-        input4->node = node->child4;
-        force(input4);
-        
+        force(particle, node->child1, theta, G);
+        force(particle, node->child2, theta, G);
+        force(particle, node->child3, theta, G);
+        force(particle, node->child4, theta, G);
+    
     }
+}
+
+void *force_thread (void * input_data) {
+    args * input  = (args*) input_data;
+    QT * node = input->node;
+    part ** particles = input->particles;
+    double theta = input->theta;
+    double G = input->G;
+    int start = input->start;
+    int stop = input->stop;
+    for(int i = start; i<stop; i++) {
+        force(particles[i], node, theta, G);
+    }
+    pthread_exit(NULL);
 }
 
 int main(int argc, char* argv[]) {
@@ -358,9 +354,12 @@ int main(int argc, char* argv[]) {
             pthread_t threads[NUM_THREADS];
             pthread_attr_t attr;
             pthread_attr_init(&attr);
+            
+            //int ret = pthread_attr_setschedpolicy(&attr, SCHED_OTHER);
             pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
             int thread_calcs = N/NUM_THREADS;
             int remaining_cals = N%NUM_THREADS;
+            
 
 
         while(t < nsteps){
@@ -370,43 +369,31 @@ int main(int argc, char* argv[]) {
             //for(int i = 0; i < N-NUM_THREADS; i+=NUM_THREADS)  
             //{ 
 
-
-                args ** input = (args**)malloc(N*sizeof(args*));
-                    for(int i = 0; i < N; i++)
-                    {
-                    input[i] = (args*) malloc(sizeof(args));
-                    }
-                
-
-                for (int i = 0; i < N; i++){
-                    input[i]->particle = array[i];
-                    input[i]->node = root;
-                    input[i]->theta = theta_max;
-                    input[i]->G = G;
+                args input[NUM_THREADS];
+                for (int i = 0; i < NUM_THREADS; i++){
+                    input[i].particles = array;
+                    input[i].node = root;
+                    input[i].theta = theta_max;
+                    input[i].G = G;
+                    input[i].start = i*thread_calcs;
+                    input[i].stop = i*thread_calcs + thread_calcs;
                 }
-                int iteration = 0;
-                for (int i = 0; i < thread_calcs; i++){
-                    for(int j=0; j < NUM_THREADS; j++) {
-                        pthread_create(&(threads[j]), NULL, force, input[j*thread_calcs + iteration]);
-                    }
-                    iteration++;
+                    
+                for (int i = 0; i < NUM_THREADS; i++){
+                        pthread_create(&(threads[i]), NULL, force_thread, &input[i]);
                 }
                 
                 for(int i=0; i<remaining_cals; i++) {
-                    pthread_create(&(threads[i]), NULL, force, input[N-i-1]);
+                    force(array[N-i-1], root, theta_max, G);
                 }
-
-                for(int j = 0; j < NUM_THREADS; j++){
-                    pthread_join(threads[j], NULL);
+                for(int k = 0; k<NUM_THREADS; k++)
+                {
+                    pthread_join(threads[k], NULL);
                 }
-                //for(int k = 0; k<NUM_THREADS; k++)
-                //{
-                //    pthread_join(threads[k], NULL);
-                //}
                 //pthread_exit(NULL);  
             //}
             //for(int j = 0; j < NUM_THREADS; j++){
-             //   pthread_join(threads[j],NULL);
+            //pthread_join(thread,NULL);
             //}
 
             vel_update(array, N, delta_t);
