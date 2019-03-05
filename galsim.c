@@ -255,7 +255,6 @@ void *force_thread (void * input_data) {
     for(int i = start; i<stop; i++) {
         force(particles[i], node, theta, G);
     }
-    pthread_exit(NULL);
 }
 
 int main(int argc, char* argv[]) {
@@ -276,29 +275,24 @@ int main(int argc, char* argv[]) {
 
     // Creates array to store particles
     struct particle **array = (part**) malloc(N*sizeof(part*));
-    for(int i = 0; i < N; i++)
-    {
-        array[i] = (part*) malloc(sizeof(part));
-    }
-
 
     // Read file
-    FILE * fp = fopen(filename, "r");
-
-    for(int i = 0; i < N; i++)
-    {
-
-        fread(&(array[i]->x), sizeof(double), 1, fp);
-        fread(&(array[i]->y), sizeof(double), 1, fp);
-        fread(&(array[i]->mass), sizeof(double), 1, fp);
-        fread(&(array[i]->x_vel), sizeof(double), 1, fp);
-        fread(&(array[i]->y_vel), sizeof(double), 1, fp);
-        fread(&(array[i]->brightness), sizeof(double), 1, fp);
-
-    }
-
-
-    fclose(fp);
+    FILE *input = fopen(filename, "r");
+    
+	for (int i =0; i<N; i++){
+		double attr[6] = {0}; //compiler will set all values to zero
+		fread(attr,sizeof(double),6,input);
+		array[i] = (part*)malloc(sizeof(part));
+		array[i]->x = attr[0];
+		array[i]->y = attr[1];
+		array[i]->mass = attr[2];
+		array[i]->x_vel = attr[3];
+		array[i]->y_vel = attr[4];
+		array[i]->brightness = attr[5];
+		array[i]->x_force = 0;
+		array[i]->y_force = 0;
+	}
+		fclose(input);
 
     // Prepare for the loop
     int t = 0;
@@ -352,49 +346,35 @@ int main(int argc, char* argv[]) {
             root->particles = array;
             root->nop = N;
             pthread_t threads[NUM_THREADS];
-            pthread_attr_t attr;
-            pthread_attr_init(&attr);
             
-            //int ret = pthread_attr_setschedpolicy(&attr, SCHED_OTHER);
-            pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
             int thread_calcs = N/NUM_THREADS;
             int remaining_cals = N%NUM_THREADS;
             
 
 
         while(t < nsteps){
-            //printf("Time sted %d \n", t);
-            create_tree(root, N);
+            create_tree(root, N);  
             
-            //for(int i = 0; i < N-NUM_THREADS; i+=NUM_THREADS)  
-            //{ 
 
-                args input[NUM_THREADS];
-                for (int i = 0; i < NUM_THREADS; i++){
-                    input[i].particles = array;
-                    input[i].node = root;
-                    input[i].theta = theta_max;
-                    input[i].G = G;
-                    input[i].start = i*thread_calcs;
-                    input[i].stop = i*thread_calcs + thread_calcs;
-                }
+            args input[NUM_THREADS];
+            for (int i = 0; i < NUM_THREADS; i++){
+                input[i].particles = array;
+                input[i].node = root;
+                input[i].theta = theta_max;
+                input[i].G = G;
+                input[i].start = i*thread_calcs;
+                input[i].stop = i*thread_calcs + thread_calcs;
                     
-                for (int i = 0; i < NUM_THREADS; i++){
-                        pthread_create(&(threads[i]), NULL, force_thread, &input[i]);
-                }
-                
-                for(int i=0; i<remaining_cals; i++) {
-                    force(array[N-i-1], root, theta_max, G);
-                }
-                for(int k = 0; k<NUM_THREADS; k++)
-                {
-                    pthread_join(threads[k], NULL);
-                }
-                //pthread_exit(NULL);  
-            //}
-            //for(int j = 0; j < NUM_THREADS; j++){
-            //pthread_join(thread,NULL);
-            //}
+                pthread_create(&(threads[i]), NULL, force_thread, &input[i]);
+            }
+            
+            for(int i=0; i<remaining_cals; i++) {
+                force(array[N-i-1], root, theta_max, G);
+            }
+            for(int k = 0; k<NUM_THREADS; k++)
+            {
+                pthread_join(threads[k], NULL);
+            }
 
             vel_update(array, N, delta_t);
             pos_update(array, N, delta_t);
@@ -405,7 +385,6 @@ int main(int argc, char* argv[]) {
             
         } 
         printf("skia\n");
-        //pthread_attr_destroy(&attr);
         free(root);                               
     }
 
@@ -430,6 +409,5 @@ int main(int argc, char* argv[]) {
         free(array[i]);
     }
     free(array);
-    //pthread_exit(NULL);
 return 0;
 }

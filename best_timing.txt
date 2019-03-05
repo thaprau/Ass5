@@ -1,0 +1,5 @@
+3.339
+intel core i7-8550u 1.8gHz 4 cores 8 threads
+0.252
+8
+
